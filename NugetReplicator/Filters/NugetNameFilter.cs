@@ -10,12 +10,12 @@ namespace NugetReplicator.Filters
     {
         public static bool isOK(string data)
         {
-            Console.WriteLine($"CHECK NUGET {data}");
             if (data.StartsWith("7zip"))
                 return true;
 
-            bool retval = (data.IndexOf("Persian", StringComparison.OrdinalIgnoreCase) > 0) ||
-                          (data.IndexOf("Nuclear", StringComparison.OrdinalIgnoreCase) > 0) ||
+            bool retval = (data.IndexOf("Persian", StringComparison.OrdinalIgnoreCase) > -1) ||
+                          (data.IndexOf("Nuclear", StringComparison.OrdinalIgnoreCase) > -1) || 
+                          (data.IndexOf("Apitron", StringComparison.OrdinalIgnoreCase) > -1) ||
                           (Char.IsDigit(data[0]) || data.StartsWith("_"));
 
             if (retval)

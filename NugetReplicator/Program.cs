@@ -19,15 +19,19 @@ namespace NugetReplicator
         // result 0
         //private const string FeedParameters = "?$filter=VersionDownloadCount gt 1000 and Published ge DateTime'2015-12-29T09:13:28' and Published le DateTime'2015-12-29T09:13:28' and IsPrerelease eq false&$orderby=Published";
         // result 1
-        private const string FeedParameters = "?$filter=VersionDownloadCount gt 1000 and Published ge DateTime'2015-12-29T09:13:28' and Published le DateTime'2015-12-29T10:13:28' and IsPrerelease eq false&$orderby=Published";
+        //private const string FeedParameters = "?$filter=VersionDownloadCount gt 1000 and Published ge DateTime'2015-12-29T09:13:28' and Published le DateTime'2015-12-29T10:13:28' and IsPrerelease eq false&$orderby=Published";
+        private const string FeedParameters = "?$filter=VersionDownloadCount gt 1000 and Published ge DateTime'1900-01-01T00:00:00' and Published le DateTime'1901-01-01T00:00:00' and IsPrerelease eq false&$orderby=Published";
         private static string _dstPath;
-        private static int _count = 0;
+        private static int _count = 100; //each "page" in the NuGet feed is max 100 entries
         private static int _totalPackages = 0;
 
         static void Main(string[] args)
         {
             ReplicatorInitiailizer();
-            ReplicateNugetRepository();           
+            ReplicateNugetRepository();
+
+            Console.WriteLine("Press any key to exit...");
+            Console.ReadKey();
         }
 
         private static void ReplicatorInitiailizer()
@@ -43,12 +47,9 @@ namespace NugetReplicator
         private static void ReplicateNugetRepository()
         {
             string feedUrl = $"{ServiceUrlBase}{FeedParameters}";            
-            _count = 100; //each "page" in the NuGet feed is max 100 entries
             while (feedUrl != null)
             {
                 feedUrl = DownloadPackagesEntries(feedUrl);
-                Console.WriteLine("NNNNNNNNEEEEEEEXXXXXXXTTTTTTTT " + _count);
-                _count += 100;
             }
         }
 
@@ -100,23 +101,13 @@ namespace NugetReplicator
                 if (!NugetNameFilter.isOK(id))
                     return;
 
-                #region deleted package filters
-
-                //string Published = GetNodeValue(properties, "Published");
-                //if (!PublishedFilter.isOK(Published, DateTime.Now))
-                //    return;
-                //if (!IsReleaseVersionFilter.isOK(version))
-                //    return;
-
-                #endregion
-
                 string version = GetNodeValue(properties, "Version");
                 string srcUrl = GetAttributeValue(entry, "content", "src");            
                 string trgFile = $"{_dstPath}/{id}.{version}.nupkg";
 
                 if (!File.Exists(trgFile))
                 {
-                    Console.WriteLine(_count++ + "/" + _totalPackages + " " + trgFile);
+                    Console.WriteLine($"download {trgFile}");
                     client.DownloadFile(srcUrl, trgFile);
                 }
             }
