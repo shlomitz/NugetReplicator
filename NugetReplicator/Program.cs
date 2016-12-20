@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using System.Xml.Linq;
 using log4net;
 using log4net.Config;
+using System.Threading;
 
 namespace NugetReplicator
 {
@@ -21,6 +22,7 @@ namespace NugetReplicator
         // result 1
         //private const string FeedParameters = "?$filter=VersionDownloadCount gt 1000 and Published ge DateTime'2015-12-29T09:13:28' and Published le DateTime'2015-12-29T10:13:28' and IsPrerelease eq false&$orderby=Published";
         //private const string FeedParameters = "?$filter=VersionDownloadCount gt 1000 and Published ge DateTime'1900-01-01T00:00:00' and Published le DateTime'1901-01-01T00:00:00' and IsPrerelease eq false&$orderby=Published";
+        // fetch all nugets which curr ver downloaded more than X and published date >= start date and published date < end date and is a release ver
         private const string FeedParametersTmplate = "?$filter=VersionDownloadCount gt {0} and Published ge DateTime'{1}' and Published lt DateTime'{2}' and IsPrerelease eq false&$orderby=Published";
         private static string _dstPath;
         private static int _count = 100; //each "page" in the NuGet feed is max 100 entries
@@ -37,14 +39,11 @@ namespace NugetReplicator
 
             _log.Info($"Start replicator at {DateTime.Now}");
 
-            Console.WriteLine("FeedParams " + FeedParameters);
-            Console.ReadLine();
-            return;
-
             ReplicatorInitiailizer();
             ReplicateNugetRepository();
 
             _log.Info($"Finish replicator at {DateTime.Now}");
+            Console.WriteLine("Finish replicator process");
             Console.WriteLine("Press any key to exit...");
             Console.ReadKey();
         }
@@ -62,7 +61,6 @@ namespace NugetReplicator
                 Environment.Exit(0);
             }
 
-            // get date params in formt 2015-1-29
             if (!DateTime.TryParse(args[0], out fromDate) ||
                 !DateTime.TryParse(args[1], out tillDate))
             {
@@ -72,6 +70,8 @@ namespace NugetReplicator
                 Environment.Exit(0);
             }
 
+            // get date params in format 2015-1-29
+            // add 1 day so start date from 00:00 till end date at 00:00 (include all end date)
             tillDate = tillDate.AddDays(1);
             FeedParameters = string.Format(FeedParametersTmplate, MIN_VER_DOWNLOADED_COUNT,
                                            fromDate.ToString("yyyy-MM-ddTHH:mm:ss"),
@@ -80,7 +80,6 @@ namespace NugetReplicator
 
         private static void ReplicatorInitiailizer()
         {
-//            _dstPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "NugetReplicator");
             _dstPath = Path.Combine(Environment.CurrentDirectory, "NugetRepo");
             if (!Directory.Exists(_dstPath))
                 Directory.CreateDirectory(_dstPath);
@@ -88,6 +87,7 @@ namespace NugetReplicator
             _totalPackages = GetTotalPackageCount();
             _log.Info($"Replicate {_totalPackages} packages");
             Console.WriteLine($"Start replicate {_totalPackages} packages");
+            Thread.Sleep(3000);
         }
 
         private static void ReplicateNugetRepository()
