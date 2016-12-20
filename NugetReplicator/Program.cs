@@ -94,7 +94,9 @@ namespace NugetReplicator
         {
             _logFilesRep.Info(@"{""files"":[");
 
-            string feedUrl = $"{ServiceUrlBase}{FeedParameters}";            
+            string feedUrl = $"{ServiceUrlBase}{FeedParameters}";
+            _log.Info($"download url {feedUrl}");
+                      
             while (feedUrl != null)
             {
                 feedUrl = DownloadPackagesEntries(feedUrl);
