@@ -1,12 +1,12 @@
 ﻿using NugetReplicator.Filters;
 using System;
-using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net;
-using System.Text;
 using System.Threading.Tasks;
 using System.Xml.Linq;
+using log4net;
+using log4net.Config;
 
 namespace NugetReplicator
 {
@@ -20,37 +20,87 @@ namespace NugetReplicator
         //private const string FeedParameters = "?$filter=VersionDownloadCount gt 1000 and Published ge DateTime'2015-12-29T09:13:28' and Published le DateTime'2015-12-29T09:13:28' and IsPrerelease eq false&$orderby=Published";
         // result 1
         //private const string FeedParameters = "?$filter=VersionDownloadCount gt 1000 and Published ge DateTime'2015-12-29T09:13:28' and Published le DateTime'2015-12-29T10:13:28' and IsPrerelease eq false&$orderby=Published";
-        private const string FeedParameters = "?$filter=VersionDownloadCount gt 1000 and Published ge DateTime'1900-01-01T00:00:00' and Published le DateTime'1901-01-01T00:00:00' and IsPrerelease eq false&$orderby=Published";
+        //private const string FeedParameters = "?$filter=VersionDownloadCount gt 1000 and Published ge DateTime'1900-01-01T00:00:00' and Published le DateTime'1901-01-01T00:00:00' and IsPrerelease eq false&$orderby=Published";
+        private const string FeedParametersTmplate = "?$filter=VersionDownloadCount gt {0} and Published ge DateTime'{1}' and Published lt DateTime'{2}' and IsPrerelease eq false&$orderby=Published";
         private static string _dstPath;
         private static int _count = 100; //each "page" in the NuGet feed is max 100 entries
         private static int _totalPackages = 0;
+        private static readonly ILog _logFilesRep = LogManager.GetLogger("ReplicatorLogger");
+        private static readonly ILog _log = LogManager.GetLogger("GeneralLogger");
+        private const int MIN_VER_DOWNLOADED_COUNT = 1000;
+        private static string FeedParameters;
 
         static void Main(string[] args)
         {
+            XmlConfigurator.Configure();
+            GetDatesRangeParams(args);
+
+            _log.Info($"Start replicator at {DateTime.Now}");
+
+            Console.WriteLine("FeedParams " + FeedParameters);
+            Console.ReadLine();
+            return;
+
             ReplicatorInitiailizer();
             ReplicateNugetRepository();
 
+            _log.Info($"Finish replicator at {DateTime.Now}");
             Console.WriteLine("Press any key to exit...");
             Console.ReadKey();
         }
 
+        private static void GetDatesRangeParams(string[] args)
+        {
+            DateTime fromDate = new DateTime();
+            DateTime tillDate = new DateTime();
+
+            if (args.Count() != 2)
+            {
+                _log.Error("Params count error");
+                Console.WriteLine("Params count error");
+                Console.ReadLine();
+                Environment.Exit(0);
+            }
+
+            // get date params in formt 2015-1-29
+            if (!DateTime.TryParse(args[0], out fromDate) ||
+                !DateTime.TryParse(args[1], out tillDate))
+            {
+                _log.Error("Date params error");
+                Console.WriteLine("Date params error");
+                Console.ReadLine();
+                Environment.Exit(0);
+            }
+
+            tillDate = tillDate.AddDays(1);
+            FeedParameters = string.Format(FeedParametersTmplate, MIN_VER_DOWNLOADED_COUNT,
+                                           fromDate.ToString("yyyy-MM-ddTHH:mm:ss"),
+                                           tillDate.ToString("yyyy-MM-ddTHH:mm:ss"));
+        }
+
         private static void ReplicatorInitiailizer()
         {
-            _dstPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "NugetReplicator");
-
+//            _dstPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "NugetReplicator");
+            _dstPath = Path.Combine(Environment.CurrentDirectory, "NugetRepo");
             if (!Directory.Exists(_dstPath))
                 Directory.CreateDirectory(_dstPath);
 
             _totalPackages = GetTotalPackageCount();
+            _log.Info($"Replicate {_totalPackages} packages");
+            Console.WriteLine($"Start replicate {_totalPackages} packages");
         }
 
         private static void ReplicateNugetRepository()
         {
+            _logFilesRep.Info(@"{""files"":[");
+
             string feedUrl = $"{ServiceUrlBase}{FeedParameters}";            
             while (feedUrl != null)
             {
                 feedUrl = DownloadPackagesEntries(feedUrl);
             }
+
+            _logFilesRep.Info($"],\"general_data\":{{\"url\":\"{ServiceUrlBase}\",\"download_time\":\"{DateTime.Now}\"}}");
         }
 
         private static int GetTotalPackageCount()
@@ -98,16 +148,24 @@ namespace NugetReplicator
             {
                 XElement properties = GetNode(entry, "properties");
                 string id = GetNodeValue(properties, "Id");
-                if (!NugetNameFilter.isOK(id))
-                    return;
-
                 string version = GetNodeValue(properties, "Version");
-                string srcUrl = GetAttributeValue(entry, "content", "src");            
-                string trgFile = $"{_dstPath}/{id}.{version}.nupkg";
+
+                if (!NugetNameFilter.isOK(id))
+                {
+                    _log.Error($"NugetNameFilter error {id}.{version}.nupkg");
+                    return;
+                }
+
+                string srcUrl = GetAttributeValue(entry, "content", "src");
+                string name = $"{id}.{ version}.nupkg";
+                string trgFile = $"{_dstPath}/{name}";
 
                 if (!File.Exists(trgFile))
                 {
+                    string packageHash = GetNodeValue(properties, "PackageHash");
+                    _logFilesRep.Info($"{{\"name\": \"{name}\",\"extra_data\":{{\"hash\":\"{packageHash}\",\"hash_algorithm\":\"SHA512\", \"id\":\"{id}\",\"version\":\"{version}\"}},");
                     Console.WriteLine($"download {trgFile}");
+
                     client.DownloadFile(srcUrl, trgFile);
                 }
             }

@@ -1,4 +1,5 @@
-﻿using System;
+﻿using log4net;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -9,7 +10,7 @@ namespace NugetReplicator.Filters
     public class NugetNameFilter
     {
         public static bool isOK(string data)
-        {
+        {            
             if (data.StartsWith("7zip"))
                 return true;
 
@@ -17,9 +18,6 @@ namespace NugetReplicator.Filters
                           (data.IndexOf("Nuclear", StringComparison.OrdinalIgnoreCase) > -1) || 
                           (data.IndexOf("Apitron", StringComparison.OrdinalIgnoreCase) > -1) ||
                           (Char.IsDigit(data[0]) || data.StartsWith("_"));
-
-            if (retval)
-                Console.WriteLine($"NugetNameFilter error {data}");
 
             return !retval;
         }
