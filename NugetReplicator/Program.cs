@@ -34,18 +34,31 @@ namespace NugetReplicator
 
         static void Main(string[] args)
         {
-            XmlConfigurator.Configure();
-            GetDatesRangeParams(args);
+            try
+            {
+                XmlConfigurator.Configure();
+                GetDatesRangeParams(args);
 
-            _log.Info($"Start replicator at {DateTime.Now}");
+                _log.Info($"Start replicator at {DateTime.Now}");
 
-            ReplicatorInitiailizer();
-            ReplicateNugetRepository();
+                bool isFirstRun = ReplicatorInitiailizer();
+                ReplicateNugetRepository(isFirstRun);
 
-            _log.Info($"Finish replicator at {DateTime.Now}");
-            Console.WriteLine("Finish replicator process");
-            Console.WriteLine("Press any key to exit...");
-            Console.ReadKey();
+                _log.Info($"Finish replicator at {DateTime.Now}");
+                Console.WriteLine("Finish replicator process");
+                Console.WriteLine("Press any key to exit...");
+                Console.ReadKey();
+            }
+            catch(Exception ex)
+            {
+                Console.WriteLine($"App Exception - for more details see log file");
+                _log.Error($"Exception - {ex.Message}{Environment.NewLine}{ex.StackTrace}");
+            }
+            finally
+            {
+                Console.WriteLine("Press any key to exit...");
+                Console.ReadKey();
+            }
         }
 
         private static void GetDatesRangeParams(string[] args)
@@ -78,21 +91,29 @@ namespace NugetReplicator
                                            tillDate.ToString("yyyy-MM-ddTHH:mm:ss"));
         }
 
-        private static void ReplicatorInitiailizer()
+        private static bool ReplicatorInitiailizer()
         {
+            bool retval = false;
+
             _dstPath = Path.Combine(Environment.CurrentDirectory, "NugetRepo");
             if (!Directory.Exists(_dstPath))
+            {
                 Directory.CreateDirectory(_dstPath);
+                retval = true;
+            }
 
             _totalPackages = GetTotalPackageCount();
             _log.Info($"Replicate {_totalPackages} packages");
             Console.WriteLine($"Start replicate {_totalPackages} packages");
             Thread.Sleep(3000);
+
+            return retval;
         }
 
-        private static void ReplicateNugetRepository()
+        private static void ReplicateNugetRepository(bool isFirstRun)
         {
-            _logFilesRep.Info(@"{""files"":[");
+            if(isFirstRun)
+                _logFilesRep.Info(@"{""files"":[");
 
             string feedUrl = $"{ServiceUrlBase}{FeedParameters}";
             _log.Info($"download url {feedUrl}");
@@ -102,7 +123,7 @@ namespace NugetReplicator
                 feedUrl = DownloadPackagesEntries(feedUrl);
             }
 
-            _logFilesRep.Info($"],\"general_data\":{{\"url\":\"{ServiceUrlBase}\",\"download_time\":\"{DateTime.Now}\"}}");
+            _logFilesRep.Info($"],\"general_data\":{{\"url\":\"{ServiceUrlBase}\",\"download_time\":\"{DateTime.Now}\"}}}}");
         }
 
         private static int GetTotalPackageCount()
@@ -164,11 +185,11 @@ namespace NugetReplicator
 
                 if (!File.Exists(trgFile))
                 {
-                    string packageHash = GetNodeValue(properties, "PackageHash");
-                    _logFilesRep.Info($"{{\"name\": \"{name}\",\"extra_data\":{{\"hash\":\"{packageHash}\",\"hash_algorithm\":\"SHA512\", \"id\":\"{id}\",\"version\":\"{version}\"}},");
                     Console.WriteLine($"download {trgFile}");
-
                     client.DownloadFile(srcUrl, trgFile);
+
+                    string packageHash = GetNodeValue(properties, "PackageHash");
+                    _logFilesRep.Info($"{{\"name\": \"{name}\",\"extra_data\":{{\"hash\":\"{packageHash}\",\"hash_algorithm\":\"SHA512\", \"id\":\"{id}\",\"version\":\"{version}\"}}}},");
                 }
             }
         }

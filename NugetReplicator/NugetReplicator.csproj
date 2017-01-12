@@ -57,8 +57,11 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="App.config" />
+    <None Include="AppScripts\AppCleaner.bat">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
     <None Include="packages.config" />
-    <None Include="RunScript\NugetReplicatorScript.bat">
+    <None Include="AppScripts\NugetReplicatorScript.bat">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
   </ItemGroup>
