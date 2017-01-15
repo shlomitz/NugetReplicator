@@ -8,6 +8,7 @@ using System.Xml.Linq;
 using log4net;
 using log4net.Config;
 using System.Threading;
+using log4net.Appender;
 
 namespace NugetReplicator
 {
@@ -38,7 +39,6 @@ namespace NugetReplicator
             {
                 XmlConfigurator.Configure();
                 GetDatesRangeParams(args);
-
                 _log.Info($"Start replicator at {DateTime.Now}");
 
                 bool isFirstRun = ReplicatorInitiailizer();
@@ -46,8 +46,6 @@ namespace NugetReplicator
 
                 _log.Info($"Finish replicator at {DateTime.Now}");
                 Console.WriteLine("Finish replicator process");
-                Console.WriteLine("Press any key to exit...");
-                Console.ReadKey();
             }
             catch(Exception ex)
             {
@@ -192,6 +190,15 @@ namespace NugetReplicator
                     _logFilesRep.Info($"{{\"name\": \"{name}\",\"extra_data\":{{\"hash\":\"{packageHash}\",\"hash_algorithm\":\"SHA512\", \"id\":\"{id}\",\"version\":\"{version}\"}}}},");
                 }
             }
+        }
+
+        // fix json - remove the last , from replicator_logs.metadata so it will be a correct json
+        private static void DeleteLastCharOfFile()
+        {
+            var logfile = _logFilesRep.Logger.Repository.GetAppenders().OfType<RollingFileAppender>().LastOrDefault();
+            string text = File.ReadAllText(logfile.File);
+            text = text.Remove(text.LastIndexOf(","), 1);
+            File.WriteAllText(logfile.File, text);
         }
 
         #region xml page XDocument parsers
