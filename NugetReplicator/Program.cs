@@ -192,7 +192,7 @@ namespace NugetReplicator
             }
         }
 
-        // fix json - remove the last , from replicator_logs.metadata so it will be a correct json
+        //  fix json - remove the last , from replicator_logs.metadata so it will be a correct json
         private static void DeleteLastCharOfFile()
         {
             var logfile = _logFilesRep.Logger.Repository.GetAppenders().OfType<RollingFileAppender>().LastOrDefault();
