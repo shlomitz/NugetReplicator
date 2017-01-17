@@ -9,6 +9,7 @@ using log4net;
 using log4net.Config;
 using System.Threading;
 using log4net.Appender;
+using System.Diagnostics;
 
 namespace NugetReplicator
 {
@@ -26,7 +27,6 @@ namespace NugetReplicator
         // fetch all nugets which curr ver downloaded more than X and published date >= start date and published date < end date and is a release ver
         private const string FeedParametersTmplate = "?$filter=VersionDownloadCount gt {0} and Published ge DateTime'{1}' and Published lt DateTime'{2}' and IsPrerelease eq false&$orderby=Published";
         private static string _dstPath;
-        private static int _count = 100; //each "page" in the NuGet feed is max 100 entries
         private static int _totalPackages = 0;
         private static readonly ILog _logFilesRep = LogManager.GetLogger("ReplicatorLogger");
         private static readonly ILog _log = LogManager.GetLogger("GeneralLogger");
@@ -38,7 +38,14 @@ namespace NugetReplicator
             try
             {
                 XmlConfigurator.Configure();
-                GetDatesRangeParams(args);
+                
+                #if DEBUG
+                    string[] testDates = new string[2]{ "28/12/2016", "29/12/2016" };
+                    GetDatesRangeParams(testDates);
+                #else
+                    GetDatesRangeParams(args);
+                #endif
+
                 _log.Info($"Start replicator at {DateTime.Now}");
 
                 bool isFirstRun = ReplicatorInitiailizer();
@@ -110,6 +117,9 @@ namespace NugetReplicator
 
         private static void ReplicateNugetRepository(bool isFirstRun)
         {
+            Stopwatch timer= new Stopwatch();
+            timer.Start();
+
             if(isFirstRun)
                 _logFilesRep.Info(@"{""files"":[");
 
@@ -121,7 +131,18 @@ namespace NugetReplicator
                 feedUrl = DownloadPackagesEntries(feedUrl);
             }
 
+            timer.Stop();
+            Console.WriteLine($"download took: {timer.ElapsedMilliseconds} mills");
+            _log.Info($"download took: {timer.ElapsedMilliseconds} mills");
+
+            timer.Reset();
+            timer.Start();
+            DeleteLastCharOfFile();
             _logFilesRep.Info($"],\"general_data\":{{\"url\":\"{ServiceUrlBase}\",\"download_time\":\"{DateTime.Now}\"}}}}");
+            timer.Stop();
+
+            Console.WriteLine($"finialize took: {timer.ElapsedMilliseconds} mills");
+            _log.Info($"finialize took: {timer.ElapsedMilliseconds} mills");
         }
 
         private static int GetTotalPackageCount()
@@ -201,7 +222,7 @@ namespace NugetReplicator
             File.WriteAllText(logfile.File, text);
         }
 
-        #region xml page XDocument parsers
+#region xml page XDocument parsers
 
         private static string GetAttributeValue(XElement element, string nodeName, string attributeName)
         {
@@ -238,6 +259,6 @@ namespace NugetReplicator
             return hit.SingleOrDefault()?.Value;
         }
 
-        #endregion
+#endregion
     }
 }
