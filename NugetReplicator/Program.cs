@@ -177,14 +177,6 @@ namespace NugetReplicator
             }
         }
 
-        private static void CalcMD5()
-        {
-            foreach (var file in Directory.GetFiles(_dstPath))
-            {
-
-            }
-        }
-
         private static string CalcMD5ForFile(string filePath)
         {           
             using (var md5 = MD5.Create())
