@@ -10,6 +10,7 @@ using log4net.Config;
 using System.Threading;
 using log4net.Appender;
 using System.Diagnostics;
+using SharpConfig;
 
 namespace NugetReplicator
 {
@@ -32,13 +33,16 @@ namespace NugetReplicator
         private static readonly ILog _log = LogManager.GetLogger("GeneralLogger");
         private const int MIN_VER_DOWNLOADED_COUNT = 1000;
         private static string FeedParameters;
+        private const string NUGET_SECTION = "Nuget";
 
         static void Main(string[] args)
         {
             try
             {
-                XmlConfigurator.Configure();
-                
+                XmlConfigurator.Configure();              
+                Configuration conf = Configuration.LoadFromFile("ReplicatorSettings.xml");
+                SysSettings nugetSettings = new SysSettings(conf["Sys"]);
+
                 #if DEBUG
                     string[] testDates = new string[2]{ "28/12/2016", "29/12/2016" };
                     GetDatesRangeParams(testDates);
