@@ -7,6 +7,12 @@ using System.Threading.Tasks;
 
 namespace NugetReplicator
 {
+    // fetch all nugets which curr ver downloaded more than X and published date >= start date and published date < end date and is a release ver
+    // result 0
+    //private const string FeedParameters = "?$filter=VersionDownloadCount gt 1000 and Published ge DateTime'2015-12-29T09:13:28' and Published le DateTime'2015-12-29T09:13:28' and IsPrerelease eq false&$orderby=Published";
+    // result 1
+    //private const string FeedParameters = "?$filter=VersionDownloadCount gt 1000 and Published ge DateTime'2015-12-29T09:13:28' and Published le DateTime'2015-12-29T10:13:28' and IsPrerelease eq false&$orderby=Published";
+    //private const string FeedParameters = "?$filter=VersionDownloadCount gt 1000 and Published ge DateTime'1900-01-01T00:00:00' and Published le DateTime'1901-01-01T00:00:00' and IsPrerelease eq false&$orderby=Published";
     public class SysSettings
     {
         private const string FeedParametersTmplate = "?$filter=VersionDownloadCount gt {0} and Published ge DateTime'{1}' and Published lt DateTime'{2}' and IsPrerelease eq false&$orderby=Published";
@@ -17,6 +23,8 @@ namespace NugetReplicator
         public SysSettings(Section section)
         {
             DownloadDirectory = section["DownloadDirectory"].StringValue;
+            DownloadID = section["DownloadID"].IntValue;
+            Hash = section["Hash"].BoolValue;
 
             GenerateFeed(section);
         }
@@ -51,6 +59,8 @@ namespace NugetReplicator
         #region Properties
 
         public string DownloadDirectory { get; set; }
+        public int DownloadID { get; set; }
+        public bool Hash { get; set; }
         public String FeedUrl
         {
             get

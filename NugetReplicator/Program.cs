@@ -11,52 +11,49 @@ using System.Threading;
 using log4net.Appender;
 using System.Diagnostics;
 using SharpConfig;
+using System.Security.Cryptography;
 
+//private const string FeedUrlBase = "https://www.myget.org/F/dotnet-core/api/v2";
+//IsLatestVersion - without beta
+//IsAbsoluteLatestVersion - include beta
 namespace NugetReplicator
 {
     class Program
     {
-        //private const string FeedUrlBase = "https://www.myget.org/F/dotnet-core/api/v2";
-        //IsLatestVersion - without beta
-        //IsAbsoluteLatestVersion - include beta
         private const string ServiceUrlBase = "https://www.nuget.org/api/v2/Packages";
-        // result 0
-        //private const string FeedParameters = "?$filter=VersionDownloadCount gt 1000 and Published ge DateTime'2015-12-29T09:13:28' and Published le DateTime'2015-12-29T09:13:28' and IsPrerelease eq false&$orderby=Published";
-        // result 1
-        //private const string FeedParameters = "?$filter=VersionDownloadCount gt 1000 and Published ge DateTime'2015-12-29T09:13:28' and Published le DateTime'2015-12-29T10:13:28' and IsPrerelease eq false&$orderby=Published";
-        //private const string FeedParameters = "?$filter=VersionDownloadCount gt 1000 and Published ge DateTime'1900-01-01T00:00:00' and Published le DateTime'1901-01-01T00:00:00' and IsPrerelease eq false&$orderby=Published";
-        // fetch all nugets which curr ver downloaded more than X and published date >= start date and published date < end date and is a release ver
-        private const string FeedParametersTmplate = "?$filter=VersionDownloadCount gt {0} and Published ge DateTime'{1}' and Published lt DateTime'{2}' and IsPrerelease eq false&$orderby=Published";
         private static string _dstPath;
-        private static int _totalPackages = 0;
+        private static bool _isNewDownload = false;
         private static readonly ILog _logFilesRep = LogManager.GetLogger("ReplicatorLogger");
         private static readonly ILog _log = LogManager.GetLogger("GeneralLogger");
-        private const int MIN_VER_DOWNLOADED_COUNT = 1000;
-        private static string FeedParameters;
-        private const string NUGET_SECTION = "Nuget";
 
         static void Main(string[] args)
         {
             try
             {
-                XmlConfigurator.Configure();              
-                Configuration conf = Configuration.LoadFromFile("ReplicatorSettings.xml");
-                SysSettings nugetSettings = new SysSettings(conf["Sys"]);
+                Configuration conf = Configuration.LoadFromFile("ReplicatorSettings.cfg");
+                SysSettings sysSettings = new SysSettings(conf["Sys"]);
+                string basePath = InitializeDownloadDir(sysSettings);
+                string filename = sysSettings.Hash ? "Hash" : "Replicator";
+                log4net.GlobalContext.Properties["MetaDataLogFileName"] = $"{basePath}\\{filename}"; //log file path
+                log4net.GlobalContext.Properties["GeneralLogFileName"] = $"{basePath}\\log"; //log file path
+                XmlConfigurator.Configure();
 
-                #if DEBUG
-                    string[] testDates = new string[2]{ "28/12/2016", "29/12/2016" };
-                    GetDatesRangeParams(testDates);
-                #else
-                    GetDatesRangeParams(args);
-                #endif
+                _log.Info($"Start {filename} at {DateTime.Now}");
 
-                _log.Info($"Start replicator at {DateTime.Now}");
-
-                bool isFirstRun = ReplicatorInitiailizer();
-                ReplicateNugetRepository(isFirstRun);
+                ReplicatorInitiailizer(sysSettings);
+                ReplicateNugetRepository(sysSettings);
 
                 _log.Info($"Finish replicator at {DateTime.Now}");
                 Console.WriteLine("Finish replicator process");
+
+                if (sysSettings.Hash)
+                {
+                    _log.Info($"Increase DownloadID param by 1 to  {++sysSettings.DownloadID}");
+                    conf["Sys"]["DownloadID"].IntValue = sysSettings.DownloadID;
+                    conf.SaveToFile("ReplicatorSettings.cfg");
+                    _log.Info($"Remove hash dir {_dstPath}");
+                    Directory.Delete(_dstPath, true);
+                }
             }
             catch(Exception ex)
             {
@@ -68,66 +65,38 @@ namespace NugetReplicator
                 Console.WriteLine("Press any key to exit...");
                 Console.ReadKey();
             }
-        }
+        }      
 
-        private static void GetDatesRangeParams(string[] args)
+        private static string InitializeDownloadDir(SysSettings sysSettings)
         {
-            DateTime fromDate = new DateTime();
-            DateTime tillDate = new DateTime();
-
-            if (args.Count() != 2)
-            {
-                _log.Error("Params count error");
-                Console.WriteLine("Params count error");
-                Console.ReadLine();
-                Environment.Exit(0);
-            }
-
-            if (!DateTime.TryParse(args[0], out fromDate) ||
-                !DateTime.TryParse(args[1], out tillDate))
-            {
-                _log.Error("Date params error");
-                Console.WriteLine("Date params error");
-                Console.ReadLine();
-                Environment.Exit(0);
-            }
-
-            // get date params in format 2015-1-29
-            // add 1 day so start date from 00:00 till end date at 00:00 (include all end date)
-            tillDate = tillDate.AddDays(1);
-            FeedParameters = string.Format(FeedParametersTmplate, MIN_VER_DOWNLOADED_COUNT,
-                                           fromDate.ToString("yyyy-MM-ddTHH:mm:ss"),
-                                           tillDate.ToString("yyyy-MM-ddTHH:mm:ss"));
-        }
-
-        private static bool ReplicatorInitiailizer()
-        {
-            bool retval = false;
-
-            _dstPath = Path.Combine(Environment.CurrentDirectory, "NugetRepo");
+            string basePath = Path.Combine(sysSettings.DownloadDirectory, sysSettings.DownloadID.ToString());
+            _dstPath = Path.Combine(basePath, sysSettings.Hash?"Hash":"Nugets");
             if (!Directory.Exists(_dstPath))
             {
                 Directory.CreateDirectory(_dstPath);
-                retval = true;
+                _isNewDownload = true;
             }
 
-            _totalPackages = GetTotalPackageCount();
-            _log.Info($"Replicate {_totalPackages} packages");
-            Console.WriteLine($"Start replicate {_totalPackages} packages");
-            Thread.Sleep(3000);
-
-            return retval;
+            return basePath;
         }
 
-        private static void ReplicateNugetRepository(bool isFirstRun)
+        private static void ReplicatorInitiailizer(SysSettings sysSettings)
+        {
+            if(_isNewDownload)
+                _logFilesRep.Info(@"{""files"":[");
+
+            int totalPackages = GetTotalPackageCount(sysSettings);
+            _log.Info($"Replicate {totalPackages} packages");
+            Console.WriteLine($"Start replicate {totalPackages} packages");
+            Thread.Sleep(2000);
+        }
+
+        private static void ReplicateNugetRepository(SysSettings sysSettings)
         {
             Stopwatch timer= new Stopwatch();
             timer.Start();
 
-            if(isFirstRun)
-                _logFilesRep.Info(@"{""files"":[");
-
-            string feedUrl = $"{ServiceUrlBase}{FeedParameters}";
+            string feedUrl = $"{ServiceUrlBase}{sysSettings.FeedUrl}";
             _log.Info($"download url {feedUrl}");
                       
             while (feedUrl != null)
@@ -149,9 +118,9 @@ namespace NugetReplicator
             _log.Info($"finialize took: {timer.ElapsedMilliseconds} mills");
         }
 
-        private static int GetTotalPackageCount()
+        private static int GetTotalPackageCount(SysSettings sysSettings)
         {
-            var url = $"{ServiceUrlBase}/$count{FeedParameters}";
+            var url = $"{ServiceUrlBase}/$count{sysSettings.FeedUrl}";
             using (var client = new WebClient())
             {
                 var total = client.DownloadString(url);
@@ -178,15 +147,6 @@ namespace NugetReplicator
                 return GetNextPageLink(feed);
             }
         }
-
-        private static string GetNextPageLink(XElement feed)
-        {
-            //if there are more OData "pages" of packages to download, there will be a <link rel="next" ... 
-            //with the source
-            var nextlink = feed.Elements().SingleOrDefault(elm => elm.Name.LocalName == "link" &&
-                                                                  elm.Attributes().Any(attr => attr.Value == "next"));
-            return nextlink == null ? null : GetAttributeValue(nextlink, "href");
-        }
         
         private static void DownloadPackage(XElement entry)
         {
@@ -211,9 +171,25 @@ namespace NugetReplicator
                     Console.WriteLine($"download {trgFile}");
                     client.DownloadFile(srcUrl, trgFile);
 
-                    string packageHash = GetNodeValue(properties, "PackageHash");
-                    _logFilesRep.Info($"{{\"name\": \"{name}\",\"extra_data\":{{\"hash\":\"{packageHash}\",\"hash_algorithm\":\"SHA512\", \"id\":\"{id}\",\"version\":\"{version}\"}}}},");
+                    string packageHash = CalcMD5ForFile(trgFile);
+                    _logFilesRep.Info($"{{\"name\": \"{name}\",\"extra_data\":{{\"hash\":\"{packageHash}\",\"hash_algorithm\":\"MD5\", \"id\":\"{id}\",\"version\":\"{version}\"}}}},");
                 }
+            }
+        }
+
+        private static void CalcMD5()
+        {
+            foreach (var file in Directory.GetFiles(_dstPath))
+            {
+
+            }
+        }
+
+        private static string CalcMD5ForFile(string filePath)
+        {           
+            using (var md5 = MD5.Create())
+            {
+                return BitConverter.ToString(md5.ComputeHash(File.ReadAllBytes(filePath))).Replace("-", string.Empty);
             }
         }
 
@@ -226,7 +202,8 @@ namespace NugetReplicator
             File.WriteAllText(logfile.File, text);
         }
 
-#region xml page XDocument parsers
+
+        #region xml page XDocument parsers
 
         private static string GetAttributeValue(XElement element, string nodeName, string attributeName)
         {
@@ -263,6 +240,15 @@ namespace NugetReplicator
             return hit.SingleOrDefault()?.Value;
         }
 
-#endregion
+        private static string GetNextPageLink(XElement feed)
+        {
+            //if there are more OData "pages" of packages to download, there will be a <link rel="next" ... 
+            //with the source
+            var nextlink = feed.Elements().SingleOrDefault(elm => elm.Name.LocalName == "link" &&
+                                                                  elm.Attributes().Any(attr => attr.Value == "next"));
+            return nextlink == null ? null : GetAttributeValue(nextlink, "href");
+        }
+
+        #endregion
     }
 }
